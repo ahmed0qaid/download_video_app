@@ -129,7 +129,7 @@ class _InspectDownloadPageState extends State<InspectDownloadPage> {
           label: 'Recommended • up to ${preferred}p',
           subtitle: 'Best video and audio, merged when needed',
           selector:
-              'bestvideo[height<=${preferred}]+bestaudio/best[height<=${preferred}]',
+              'bestvideo[height<=$preferred]+bestaudio/best[height<=$preferred]',
         ),
       );
     } else {
@@ -381,7 +381,7 @@ class _InspectDownloadPageState extends State<InspectDownloadPage> {
                 const SectionLabel('Quality & format'),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: currentKey,
+                  initialValue: currentKey,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.high_quality_rounded),
