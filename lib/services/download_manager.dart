@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
+import 'media_extractor.dart';
 
 class DownloadManager extends ChangeNotifier {
   static const _prefTheme = 'theme_mode';
@@ -13,14 +15,22 @@ class DownloadManager extends ChangeNotifier {
   static const _prefAutoRetry = 'auto_retry';
   static const _prefWifiOnly = 'wifi_only';
   static const _prefDirectory = 'download_directory';
+  static const _prefMediaEnabled = 'media_extraction_enabled';
+  static const _prefUseAria2 = 'media_use_aria2';
+  static const _prefQuality = 'media_preferred_quality';
+  static const _prefMediaJobs = 'media_jobs_v1';
 
   FileDownloader? _downloaderInstance;
   SharedPreferencesAsync? _preferencesInstance;
   StreamSubscription<TaskUpdate>? _updatesSubscription;
   StreamSubscription<TaskRecord>? _databaseSubscription;
+  StreamSubscription<String>? _shareSubscription;
+  Timer? _mediaPollTimer;
 
+  final YtDlpBridge _mediaBridge = const YtDlpBridge();
   final Map<String, TransferTelemetry> _telemetry = {};
   List<TaskRecord> _records = const [];
+  List<MediaJob> _mediaJobs = const [];
 
   bool _initialized = false;
   String? _initializationError;
@@ -29,6 +39,10 @@ class DownloadManager extends ChangeNotifier {
   bool _wifiOnly = false;
   String _downloadDirectory = 'Downloads';
   ThemeMode _themeMode = ThemeMode.system;
+  bool _mediaExtractionEnabled = true;
+  bool _useAria2 = true;
+  int _preferredQuality = 1080;
+  String? _pendingSharedUrl;
 
   FileDownloader get _downloader =>
       _downloaderInstance ??= FileDownloader();
@@ -38,20 +52,25 @@ class DownloadManager extends ChangeNotifier {
   bool get initialized => _initialized;
   String? get initializationError => _initializationError;
   List<TaskRecord> get records => List.unmodifiable(_records);
+  List<MediaJob> get mediaJobs => List.unmodifiable(_mediaJobs);
   int get simultaneousDownloads => _simultaneousDownloads;
   bool get autoRetry => _autoRetry;
   bool get wifiOnly => _wifiOnly;
   String get downloadDirectory => _downloadDirectory;
   ThemeMode get themeMode => _themeMode;
+  bool get mediaExtractionEnabled => _mediaExtractionEnabled;
+  bool get useAria2 => _useAria2;
+  int get preferredQuality => _preferredQuality;
+  String? get pendingSharedUrl => _pendingSharedUrl;
 
   Future<void> initialize() async {
     if (_initialized) return;
 
     try {
       await _loadPreferences();
+      await _loadMediaJobs();
 
       _updatesSubscription = _downloader.updates.listen(_onTaskUpdate);
-
       _downloader.configureNotification(
         running: const TaskNotification(
           'Downloading',
@@ -72,10 +91,16 @@ class DownloadManager extends ChangeNotifier {
       await _downloader.resumeFromBackground();
       await _applyConcurrency();
       await refreshRecords(notify: false);
+
+      if (_mediaExtractionEnabled) {
+        _startShareListener();
+        await refreshMediaJobs(notify: false);
+      }
     } catch (error) {
       _initializationError = error.toString();
     } finally {
       _initialized = true;
+      _ensureMediaPolling();
       notifyListeners();
     }
   }
@@ -88,6 +113,11 @@ class DownloadManager extends ChangeNotifier {
     _downloadDirectory = _normalizeDirectory(
       await _preferences.getString(_prefDirectory) ?? 'Downloads',
     );
+    _mediaExtractionEnabled =
+        await _preferences.getBool(_prefMediaEnabled) ?? true;
+    _useAria2 = await _preferences.getBool(_prefUseAria2) ?? true;
+    _preferredQuality =
+        (await _preferences.getInt(_prefQuality) ?? 1080).clamp(0, 4320).toInt();
 
     final storedTheme = await _preferences.getString(_prefTheme);
     _themeMode = switch (storedTheme) {
@@ -95,6 +125,53 @@ class DownloadManager extends ChangeNotifier {
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
     };
+  }
+
+  Future<void> _loadMediaJobs() async {
+    final stored = await _preferences.getString(_prefMediaJobs);
+    if (stored == null || stored.isEmpty) return;
+    try {
+      final values = jsonDecode(stored);
+      if (values is List) {
+        _mediaJobs = values
+            .whereType<String>()
+            .map(MediaJob.fromJson)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      }
+    } catch (_) {
+      _mediaJobs = const [];
+    }
+  }
+
+  Future<void> _saveMediaJobs() async {
+    final encoded = jsonEncode(_mediaJobs.map((e) => e.toJson()).toList());
+    await _preferences.setString(_prefMediaJobs, encoded);
+  }
+
+  void _startShareListener() {
+    if (_shareSubscription != null) return;
+    _shareSubscription = _mediaBridge.sharedUrls.listen(
+      (value) {
+        _pendingSharedUrl = value.trim();
+        notifyListeners();
+      },
+      onError: (_) {},
+    );
+  }
+
+  String? consumePendingSharedUrl() {
+    final value = _pendingSharedUrl;
+    _pendingSharedUrl = null;
+    return value;
+  }
+
+  Future<void> refreshAll() async {
+    await Future.wait([
+      refreshRecords(notify: false),
+      if (_mediaExtractionEnabled) refreshMediaJobs(notify: false),
+    ]);
+    notifyListeners();
   }
 
   Future<void> refreshRecords({bool notify = true}) async {
@@ -141,6 +218,39 @@ class DownloadManager extends ChangeNotifier {
     return record.expectedFileSize > 0 ? record.expectedFileSize : null;
   }
 
+  Future<LinkInspection> inspectLink(String value) async {
+    final input = value.trim();
+    final uri = Uri.tryParse(input);
+    if (uri == null ||
+        !{'http', 'https'}.contains(uri.scheme.toLowerCase()) ||
+        uri.host.isEmpty) {
+      throw const FormatException('Enter a valid HTTP or HTTPS URL.');
+    }
+
+    if (_looksLikeDirectFile(uri)) {
+      try {
+        return LinkInspection.direct(await inspectUrl(input));
+      } catch (_) {
+        if (!_mediaExtractionEnabled) rethrow;
+      }
+    }
+
+    if (_mediaExtractionEnabled) {
+      try {
+        final media = await _mediaBridge.inspect(input);
+        return LinkInspection.media(media);
+      } catch (mediaError) {
+        try {
+          return LinkInspection.direct(await inspectUrl(input));
+        } catch (_) {
+          throw StateError(_friendlyMediaError(mediaError));
+        }
+      }
+    }
+
+    return LinkInspection.direct(await inspectUrl(input));
+  }
+
   Future<RemoteFileInfo> inspectUrl(String value) async {
     final input = value.trim();
     final uri = Uri.tryParse(input);
@@ -155,7 +265,7 @@ class DownloadManager extends ChangeNotifier {
     final client = http.Client();
     try {
       final request = http.Request('HEAD', uri)
-        ..headers['User-Agent'] = 'DownloadVideoApp/1.1';
+        ..headers['User-Agent'] = 'DownloadVideoApp/1.2';
       final response = await client
           .send(request)
           .timeout(const Duration(seconds: 15));
@@ -171,6 +281,12 @@ class DownloadManager extends ChangeNotifier {
       final pathName = uri.pathSegments.isEmpty
           ? null
           : Uri.decodeComponent(uri.pathSegments.last);
+      final mimeType = response.headers['content-type']?.split(';').first.trim();
+      if ((mimeType == 'text/html' || mimeType == 'application/xhtml+xml') &&
+          !_looksLikeDirectFile(uri)) {
+        throw StateError('This is a web page, not a direct file URL.');
+      }
+
       final fileName = _sanitizeFileName(
         headerName?.isNotEmpty == true
             ? headerName!
@@ -186,7 +302,7 @@ class DownloadManager extends ChangeNotifier {
         sizeBytes: response.contentLength != null && response.contentLength! > 0
             ? response.contentLength
             : null,
-        mimeType: response.headers['content-type']?.split(';').first.trim(),
+        mimeType: mimeType,
       );
     } on TimeoutException {
       throw StateError('The server did not respond in time.');
@@ -218,6 +334,157 @@ class DownloadManager extends ChangeNotifier {
     }
     await refreshRecords();
     return task;
+  }
+
+  Future<MediaJob> startMediaDownload(
+    MediaInfo info, {
+    required String formatSelector,
+    required String formatLabel,
+    String? audioFormat,
+    bool playlist = false,
+    bool? wifiOnly,
+  }) async {
+    if (!_mediaExtractionEnabled) {
+      throw StateError('Media extraction is disabled in Settings.');
+    }
+    final effectiveWifi = wifiOnly ?? _wifiOnly;
+    final id = await _mediaBridge.enqueue(
+      url: info.url,
+      title: info.title,
+      formatSelector: formatSelector,
+      formatLabel: formatLabel,
+      wifiOnly: effectiveWifi,
+      useAria2: _useAria2,
+      playlist: playlist,
+      audioFormat: audioFormat,
+    );
+    final job = MediaJob(
+      id: id,
+      url: info.url,
+      title: info.title,
+      formatLabel: formatLabel,
+      formatSelector: formatSelector,
+      audioFormat: audioFormat,
+      thumbnail: info.thumbnail,
+      createdAt: DateTime.now(),
+      state: MediaJobState.queued,
+      progress: 0,
+      playlist: playlist,
+      wifiOnly: effectiveWifi,
+      useAria2: _useAria2,
+    );
+    _mediaJobs = [job, ..._mediaJobs];
+    await _saveMediaJobs();
+    _ensureMediaPolling();
+    notifyListeners();
+    return job;
+  }
+
+  Future<void> refreshMediaJobs({bool notify = true}) async {
+    if (_mediaJobs.isEmpty) return;
+    try {
+      final states = await _mediaBridge.jobStates(
+        _mediaJobs.map((e) => e.id).toList(),
+      );
+      final byId = <String, Map<Object?, Object?>>{
+        for (final item in states)
+          if (item['id'] != null) item['id'].toString(): item,
+      };
+      var changed = false;
+      _mediaJobs = _mediaJobs.map((job) {
+        final state = byId[job.id];
+        if (state == null) return job;
+        final next = job.copyWith(
+          state: _mediaStateFromName(state['state']?.toString()),
+          progress: (state['progress'] as num?)?.toInt(),
+          etaSeconds: (state['eta'] as num?)?.toInt(),
+          outputPath: state['outputPath']?.toString(),
+          error: state['error']?.toString(),
+          sizeBytes: (state['sizeBytes'] as num?)?.toInt(),
+        );
+        if (next.state != job.state ||
+            next.progress != job.progress ||
+            next.outputPath != job.outputPath ||
+            next.error != job.error) {
+          changed = true;
+        }
+        return next;
+      }).toList();
+      if (changed) await _saveMediaJobs();
+    } catch (_) {
+      // The native media engine is Android-only; direct downloads remain usable.
+    }
+    _ensureMediaPolling();
+    if (notify) notifyListeners();
+  }
+
+  void _ensureMediaPolling() {
+    final shouldPoll = _mediaExtractionEnabled && _mediaJobs.any((e) => e.isActive);
+    if (!shouldPoll) {
+      _mediaPollTimer?.cancel();
+      _mediaPollTimer = null;
+      return;
+    }
+    _mediaPollTimer ??= Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(refreshMediaJobs());
+    });
+  }
+
+  Future<bool> cancelMediaJob(MediaJob job) async {
+    final canceled = await _mediaBridge.cancel(job.id);
+    await refreshMediaJobs();
+    return canceled;
+  }
+
+  Future<MediaJob> retryMediaJob(MediaJob job) async {
+    final id = await _mediaBridge.enqueue(
+      url: job.url,
+      title: job.title,
+      formatSelector: job.formatSelector,
+      formatLabel: job.formatLabel,
+      wifiOnly: job.wifiOnly,
+      useAria2: job.useAria2,
+      playlist: job.playlist,
+      audioFormat: job.audioFormat,
+    );
+    final retried = job.copyWith(
+      id: id,
+      state: MediaJobState.queued,
+      progress: 0,
+      etaSeconds: 0,
+      outputPath: '',
+      error: '',
+      sizeBytes: 0,
+    );
+    _mediaJobs = [retried, ..._mediaJobs];
+    await _saveMediaJobs();
+    _ensureMediaPolling();
+    notifyListeners();
+    return retried;
+  }
+
+  Future<bool> openMediaJob(MediaJob job) async {
+    final path = job.outputPath;
+    if (job.state != MediaJobState.succeeded || path == null || path.isEmpty) {
+      return false;
+    }
+    return _mediaBridge.openPath(path);
+  }
+
+  Future<bool> shareMediaJob(MediaJob job) async {
+    final path = job.outputPath;
+    if (job.state != MediaJobState.succeeded || path == null || path.isEmpty) {
+      return false;
+    }
+    return _mediaBridge.sharePath(path);
+  }
+
+  Future<void> deleteMediaHistory(MediaJob job) async {
+    if (job.isActive) await _mediaBridge.cancel(job.id);
+    _mediaJobs = _mediaJobs.where((e) => e.id != job.id).toList();
+    await _saveMediaJobs();
+    _ensureMediaPolling();
+    notifyListeners();
   }
 
   Future<bool> pause(TaskRecord record) async {
@@ -310,6 +577,34 @@ class DownloadManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setMediaExtractionEnabled(bool value) async {
+    _mediaExtractionEnabled = value;
+    await _preferences.setBool(_prefMediaEnabled, value);
+    if (value) {
+      _startShareListener();
+      await refreshMediaJobs(notify: false);
+    } else {
+      await _shareSubscription?.cancel();
+      _shareSubscription = null;
+    }
+    _ensureMediaPolling();
+    notifyListeners();
+  }
+
+  Future<void> setUseAria2(bool value) async {
+    _useAria2 = value;
+    await _preferences.setBool(_prefUseAria2, value);
+    notifyListeners();
+  }
+
+  Future<void> setPreferredQuality(int value) async {
+    _preferredQuality = value.clamp(0, 4320).toInt();
+    await _preferences.setInt(_prefQuality, _preferredQuality);
+    notifyListeners();
+  }
+
+  Future<String> updateMediaEngine() => _mediaBridge.updateEngine();
+
   static bool isActiveStatus(TaskStatus status) =>
       status == TaskStatus.enqueued ||
       status == TaskStatus.running ||
@@ -329,6 +624,14 @@ class DownloadManager extends ChangeNotifier {
     TaskStatus.canceled => 'Canceled',
     TaskStatus.waitingToRetry => 'Waiting to retry',
     TaskStatus.paused => 'Paused',
+  };
+
+  static String mediaStatusLabel(MediaJobState state) => switch (state) {
+    MediaJobState.queued => 'Queued',
+    MediaJobState.running => 'Processing',
+    MediaJobState.succeeded => 'Completed',
+    MediaJobState.failed => 'Failed',
+    MediaJobState.canceled => 'Canceled',
   };
 
   static String formatBytes(int? bytes) {
@@ -362,6 +665,41 @@ class DownloadManager extends ChangeNotifier {
       return '${hours}h ${mins}m';
     }
     return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  static String formatMediaDuration(int? seconds) {
+    if (seconds == null || seconds <= 0) return '--';
+    final duration = Duration(seconds: seconds);
+    if (duration.inHours > 0) {
+      return '${duration.inHours}:${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+    }
+    return '${duration.inMinutes}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+  }
+
+  static MediaJobState _mediaStateFromName(String? value) => switch (value) {
+    'running' => MediaJobState.running,
+    'succeeded' => MediaJobState.succeeded,
+    'failed' => MediaJobState.failed,
+    'canceled' => MediaJobState.canceled,
+    _ => MediaJobState.queued,
+  };
+
+  static String _friendlyMediaError(Object error) {
+    final text = error.toString().replaceFirst('PlatformException(', '');
+    if (text.length > 260) return '${text.substring(0, 260)}…';
+    return text;
+  }
+
+  static bool _looksLikeDirectFile(Uri uri) {
+    if (uri.pathSegments.isEmpty) return false;
+    final last = uri.pathSegments.last.toLowerCase();
+    const extensions = {
+      'mp4', 'mkv', 'webm', 'mov', 'avi', 'mp3', 'm4a', 'aac', 'flac', 'wav',
+      'pdf', 'zip', 'rar', '7z', 'tar', 'gz', 'xz', 'apk', 'aab', 'jpg', 'jpeg',
+      'png', 'webp', 'csv', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    };
+    final dot = last.lastIndexOf('.');
+    return dot >= 0 && extensions.contains(last.substring(dot + 1));
   }
 
   static String _normalizeDirectory(String value) {
@@ -398,6 +736,8 @@ class DownloadManager extends ChangeNotifier {
   void dispose() {
     _updatesSubscription?.cancel();
     _databaseSubscription?.cancel();
+    _shareSubscription?.cancel();
+    _mediaPollTimer?.cancel();
     super.dispose();
   }
 }

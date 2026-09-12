@@ -13,7 +13,7 @@ class SettingsPage extends StatelessWidget {
     final value = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Download folder'),
+        title: const Text('Direct-download folder'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -38,6 +38,23 @@ class SettingsPage extends StatelessWidget {
     if (value != null) await manager.setDownloadDirectory(value);
   }
 
+  Future<void> _updateExtractor(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Checking for a yt-dlp extractor update…')),
+    );
+    try {
+      final result = await manager.updateMediaEngine();
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(result)));
+    } catch (error) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Extractor update failed: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -54,13 +71,76 @@ class SettingsPage extends StatelessWidget {
                     Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 3),
                     Text(
-                      'These preferences are saved on this device and applied to real transfers.',
+                      'Direct transfers and public media extraction use separate engines so one cannot break the other.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 16),
                     _SettingsSection(
+                      icon: Icons.smart_display_outlined,
+                      title: 'Media Engine',
+                      children: [
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Video/audio site extraction'),
+                          subtitle: const Text(
+                            'Use yt-dlp for public media pages and playlists',
+                          ),
+                          value: manager.mediaExtractionEnabled,
+                          onChanged: manager.setMediaExtractionEnabled,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Preferred video quality'),
+                          subtitle: const Text('Used as the recommended format during inspection'),
+                          trailing: DropdownButton<int>(
+                            value: manager.preferredQuality,
+                            underline: const SizedBox.shrink(),
+                            items: const [
+                              DropdownMenuItem(value: 0, child: Text('Best')),
+                              DropdownMenuItem(value: 2160, child: Text('2160p')),
+                              DropdownMenuItem(value: 1440, child: Text('1440p')),
+                              DropdownMenuItem(value: 1080, child: Text('1080p')),
+                              DropdownMenuItem(value: 720, child: Text('720p')),
+                              DropdownMenuItem(value: 480, child: Text('480p')),
+                              DropdownMenuItem(value: 360, child: Text('360p')),
+                            ],
+                            onChanged: manager.mediaExtractionEnabled
+                                ? (value) {
+                                    if (value != null) manager.setPreferredQuality(value);
+                                  }
+                                : null,
+                          ),
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Aria2 acceleration'),
+                          subtitle: const Text(
+                            'Let yt-dlp use Aria2 when the source supports it',
+                          ),
+                          value: manager.useAria2,
+                          onChanged: manager.mediaExtractionEnabled
+                              ? manager.setUseAria2
+                              : null,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.system_update_alt_rounded),
+                          title: const Text('Update yt-dlp extractor'),
+                          subtitle: const Text(
+                            'Refresh site extractors without changing the Flutter app',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          enabled: manager.mediaExtractionEnabled,
+                          onTap: manager.mediaExtractionEnabled
+                              ? () => _updateExtractor(context)
+                              : null,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsSection(
                       icon: Icons.tune_rounded,
-                      title: 'Transfer Engine',
+                      title: 'Direct Transfer Engine',
                       children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -97,7 +177,7 @@ class SettingsPage extends StatelessWidget {
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Auto-retry failed transfers'),
-                          subtitle: const Text('New downloads retry up to 5 times'),
+                          subtitle: const Text('New direct downloads retry up to 5 times'),
                           value: manager.autoRetry,
                           onChanged: manager.setAutoRetry,
                         ),
@@ -112,7 +192,7 @@ class SettingsPage extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Wi-Fi only'),
                           subtitle: const Text(
-                            'Use Wi-Fi only by default for new transfers',
+                            'Use unmetered Wi-Fi by default for new direct and media jobs',
                           ),
                           value: manager.wifiOnly,
                           onChanged: manager.setWifiOnly,
@@ -126,12 +206,16 @@ class SettingsPage extends StatelessWidget {
                       children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('Default download directory'),
-                          subtitle: Text(
-                            'App support / ${manager.downloadDirectory}',
-                          ),
+                          title: const Text('Direct-download directory'),
+                          subtitle: Text('App support / ${manager.downloadDirectory}'),
                           trailing: const Icon(Icons.edit_outlined),
                           onTap: () => _editDirectory(context),
+                        ),
+                        const ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Video/audio directory'),
+                          subtitle: Text('Public Downloads / Download Video App'),
+                          leading: Icon(Icons.video_file_outlined),
                         ),
                       ],
                     ),
@@ -168,10 +252,24 @@ class SettingsPage extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    _SettingsSection(
+                      icon: Icons.shield_outlined,
+                      title: 'Responsible use',
+                      children: const [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Public and permitted media only'),
+                          subtitle: Text(
+                            'No DRM bypass, paywall bypass, premium unlocking, or private-account cookie extraction is implemented.',
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 18),
                     Center(
                       child: Text(
-                        'Download Video App • Background engine enabled',
+                        'Download Video App • Direct + yt-dlp media engines',
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                     ),

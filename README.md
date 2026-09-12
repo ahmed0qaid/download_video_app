@@ -1,47 +1,74 @@
 # Download Video App
 
-A Flutter download manager for direct **HTTP/HTTPS file URLs**. The app keeps the original Stitch-inspired visual design while replacing demo data with a real persistent background download engine.
+A Flutter download manager with two independent engines:
+
+1. **Direct transfer engine** for HTTP/HTTPS files using `background_downloader`.
+2. **Media engine** for public video/audio pages using Android `yt-dlp` through `youtubedl-android`.
+
+The two engines are intentionally separate. A site extractor failure does not break direct file downloads.
 
 ## Implemented
 
-- Direct link inspection using a real HTTP `HEAD` request
-- Background downloads with persistent task history
-- Live progress, expected file size, transfer speed, and estimated time remaining when the server provides them
-- Pause, resume, cancel, and retry
-- Native Android download notifications
-- Wi-Fi-only enforcement for new tasks
-- Configurable simultaneous download limit
-- Configurable relative download folder
-- Automatic retries for new tasks
-- Real completed-file library with search/category filters
-- Open completed files with an installed compatible app
-- Light, dark, and system themes persisted locally
-- Android project files with package `com.ahmedqaid.downloadvideoapp`
-- GitHub Actions checks: `flutter analyze`, `flutter test`, and Android debug APK build
+### Public media links
+- Inspect public video/audio pages with yt-dlp metadata extraction.
+- Detect title, uploader, thumbnail, duration, extractor, formats, and playlists.
+- Recommended quality selector plus 2160p, 1440p, 1080p, 720p, 480p, and 360p limits.
+- Show source-provided combined formats when available.
+- Best video + audio merging with FFmpeg.
+- MP3 and M4A audio extraction.
+- Playlist queueing.
+- Background Android WorkManager jobs with progress and ETA.
+- Optional Aria2 acceleration.
+- Retry, cancel, open, share, and persistent Flutter-side history.
+- Receive links from Android's Share sheet.
+- Update yt-dlp extractors from Settings.
+- Media outputs are stored under `Downloads/Download Video App`.
 
-## Supported links
+### Direct files
+- Real HTTP `HEAD` metadata inspection.
+- Persistent background downloads.
+- Live progress, expected size, transfer speed, and ETA when available.
+- Pause, resume, cancel, and retry.
+- Wi-Fi-only mode and simultaneous-download limit.
+- Native notifications and completed-file library.
 
-The app intentionally supports direct HTTP/HTTPS file URLs only. It does not bypass DRM, authentication, paywalls, or website restrictions and it does not include site-specific video extraction.
+### App
+- Unified Transfers screen for direct and yt-dlp jobs.
+- Unified Library for completed files and media.
+- Light, dark, and system themes.
+- Persistent settings.
+- CI runs dependency resolution, `flutter analyze`, and `flutter test` only. It intentionally does **not** build or upload APK artifacts.
 
-## Run
+## Responsible-use boundary
+
+Use the app only for media you are authorized to download. The project intentionally does **not** implement DRM circumvention, paywall bypassing, premium-format unlocking, or private-account cookie extraction.
+
+## Android media architecture
+
+```text
+Flutter UI
+  ├─ Direct HTTP/HTTPS -> background_downloader
+  └─ Media page/playlist -> MethodChannel -> yt-dlp metadata
+                                      -> WorkManager YtDlpWorker
+                                      -> yt-dlp + FFmpeg + optional Aria2
+                                      -> public Downloads folder
+```
+
+The native media bridge lives in:
+
+- `android/app/src/main/kotlin/com/ahmedqaid/downloadvideoapp/MainActivity.kt`
+- `android/app/src/main/kotlin/com/ahmedqaid/downloadvideoapp/YtDlpWorker.kt`
+- `lib/services/media_extractor.dart`
+
+## Development
 
 ```bash
-git clone https://github.com/ahmed0qaid/download_video_app.git
-cd download_video_app
 flutter pub get
+flutter analyze
+flutter test
 flutter run
 ```
 
-For an APK:
+## Third-party components
 
-```bash
-flutter build apk --debug
-```
-
-The generated debug APK is also uploaded as a GitHub Actions artifact after successful CI builds.
-
-## Main packages
-
-- `background_downloader` for native background transfer execution, persistence, notifications, pause/resume, and queue controls
-- `http` for link metadata inspection
-- `shared_preferences` for app preferences
+The Android media engine depends on `youtubedl-android` 0.18.1, which wraps yt-dlp and provides FFmpeg/Aria2 integration. `youtubedl-android` is GPLv3-licensed. Anyone distributing this application must review and comply with the licenses of youtubedl-android, yt-dlp, FFmpeg, Aria2, and the rest of the dependency graph. See `THIRD_PARTY_NOTICES.md`.

@@ -1,7 +1,7 @@
 name: download_video_app
-description: A real Flutter background download manager for direct HTTP/HTTPS files.
+description: A Flutter download manager for direct files and public video/audio media links.
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
