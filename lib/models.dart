@@ -5,6 +5,7 @@ class RemoteFileInfo {
     required this.url,
     required this.fileName,
     required this.host,
+    required this.supportsResume,
     this.sizeBytes,
     this.mimeType,
   });
@@ -12,8 +13,27 @@ class RemoteFileInfo {
   final String url;
   final String fileName;
   final String host;
+  final bool supportsResume;
   final int? sizeBytes;
   final String? mimeType;
+}
+
+enum TransferState { queued, running, paused, completed, failed, canceled }
+
+class TransferStateView {
+  const TransferStateView({
+    required this.state,
+    required this.label,
+    required this.active,
+    required this.finalState,
+    required this.failure,
+  });
+
+  final TransferState state;
+  final String label;
+  final bool active;
+  final bool finalState;
+  final bool failure;
 }
 
 class TransferTelemetry {
@@ -215,15 +235,21 @@ class MediaJob {
 
   factory MediaJob.fromJson(String source) {
     final map = jsonDecode(source) as Map<String, dynamic>;
+    return MediaJob.fromMap(map);
+  }
+
+  factory MediaJob.fromMap(Map<String, Object?> map) {
     return MediaJob(
-      id: map['id'] as String,
-      url: map['url'] as String,
-      title: map['title'] as String,
-      formatLabel: map['formatLabel'] as String,
-      formatSelector: map['formatSelector'] as String,
+      id: map['id'] as String? ?? '',
+      url: map['url'] as String? ?? '',
+      title: map['title'] as String? ?? 'Untitled media',
+      formatLabel: map['formatLabel'] as String? ?? 'Media',
+      formatSelector: map['formatSelector'] as String? ?? 'best',
       audioFormat: map['audioFormat'] as String?,
       thumbnail: map['thumbnail'] as String?,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        (map['createdAt'] as num?)?.toInt() ?? 0,
+      ),
       state: MediaJobState.values.firstWhere(
         (e) => e.name == map['state'],
         orElse: () => MediaJobState.queued,
@@ -292,6 +318,10 @@ class MediaJob {
   }
 
   String toJson() => jsonEncode({
+        ...toMap(),
+      });
+
+  Map<String, Object?> toMap() => {
         'id': id,
         'url': url,
         'title': title,
@@ -309,5 +339,5 @@ class MediaJob {
         'playlist': playlist,
         'wifiOnly': wifiOnly,
         'useAria2': useAria2,
-      });
+      };
 }

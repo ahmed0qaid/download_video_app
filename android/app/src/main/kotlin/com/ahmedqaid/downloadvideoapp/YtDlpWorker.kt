@@ -67,6 +67,9 @@ class YtDlpWorker(
             val request = YoutubeDLRequest(url)
             request.addOption("--ignore-config")
             request.addOption("--newline")
+            request.addOption("--continue")
+            request.addOption("--retries", "10")
+            request.addOption("--fragment-retries", "10")
             request.addOption("--no-mtime")
             request.addOption("--no-overwrites")
             request.addOption("--trim-filenames", "180")
@@ -85,6 +88,7 @@ class YtDlpWorker(
 
             if (useAria2) {
                 request.addOption("--downloader", "libaria2c.so")
+                request.addOption("--downloader-args", "aria2c:-x 8 -s 8 -k 1M")
             }
 
             YoutubeDL.execute(
@@ -151,7 +155,10 @@ class YtDlpWorker(
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(inputData.getString(KEY_TITLE) ?: "Media download")
             .setContentText(text)
+            .setSubText("${progress.coerceIn(0, 100)}%")
             .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setOngoing(progress < 100)
             .setProgress(100, progress, progress <= 0)

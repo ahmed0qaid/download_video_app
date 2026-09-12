@@ -33,6 +33,7 @@ class MainActivity : FlutterActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var shareSink: EventChannel.EventSink? = null
     private var pendingSharedText: String? = null
+    @Volatile private var mediaLibrariesReady = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -104,6 +105,8 @@ class MainActivity : FlutterActivity() {
                 request.addOption("--skip-download")
                 request.addOption("--no-warnings")
                 request.addOption("--ignore-config")
+                request.addOption("--socket-timeout", "20")
+                request.addOption("--retries", "2")
                 request.addOption("--flat-playlist")
                 val response = YoutubeDL.execute(request)
                 val json = JSONObject(extractJsonObject(response.out))
@@ -223,9 +226,11 @@ class MainActivity : FlutterActivity() {
 
     @Synchronized
     private fun ensureMediaLibraries() {
+        if (mediaLibrariesReady) return
         YoutubeDL.init(applicationContext)
         FFmpeg.init(applicationContext)
         Aria2c.init(applicationContext)
+        mediaLibrariesReady = true
     }
 
     private fun mediaInfoMap(json: JSONObject, originalUrl: String): Map<String, Any?> {
@@ -303,9 +308,16 @@ class MainActivity : FlutterActivity() {
         val raw = when (intent.action) {
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
             Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
+                ?.toString()
             else -> null
         }?.trim()
-        return raw?.takeIf { it.isNotEmpty() }
+        return raw?.let(::firstHttpUrl)?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun firstHttpUrl(value: String): String? {
+        val match = Regex("""https?://[^\s<>"']+""").find(value)
+        return match?.value?.trimEnd('.', ',', ')', ']') ?: value.takeIf(::isHttpUrl)
     }
 
     private fun openPath(path: String?): Boolean {

@@ -7,9 +7,20 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
+import '../repositories/media_job_store.dart';
 import 'media_extractor.dart';
 
 class DownloadManager extends ChangeNotifier {
+  DownloadManager({
+    FileDownloader? downloader,
+    SharedPreferencesAsync? preferences,
+    YtDlpBridge mediaBridge = const YtDlpBridge(),
+    MediaJobStore? mediaJobStore,
+  })  : _downloaderInstance = downloader,
+        _preferencesInstance = preferences,
+        _mediaBridge = mediaBridge,
+        _mediaJobStore = mediaJobStore ?? MediaJobStore();
+
   static const _prefTheme = 'theme_mode';
   static const _prefSimultaneous = 'simultaneous_downloads';
   static const _prefAutoRetry = 'auto_retry';
@@ -27,7 +38,8 @@ class DownloadManager extends ChangeNotifier {
   StreamSubscription<String>? _shareSubscription;
   Timer? _mediaPollTimer;
 
-  final YtDlpBridge _mediaBridge = const YtDlpBridge();
+  final YtDlpBridge _mediaBridge;
+  final MediaJobStore _mediaJobStore;
   final Map<String, TransferTelemetry> _telemetry = {};
   List<TaskRecord> _records = const [];
   List<MediaJob> _mediaJobs = const [];
@@ -128,6 +140,9 @@ class DownloadManager extends ChangeNotifier {
   }
 
   Future<void> _loadMediaJobs() async {
+    _mediaJobs = await _mediaJobStore.loadAll();
+    if (_mediaJobs.isNotEmpty) return;
+
     final stored = await _preferences.getString(_prefMediaJobs);
     if (stored == null || stored.isEmpty) return;
     try {
@@ -138,6 +153,8 @@ class DownloadManager extends ChangeNotifier {
             .map(MediaJob.fromJson)
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        await _mediaJobStore.upsertAll(_mediaJobs);
+        await _preferences.remove(_prefMediaJobs);
       }
     } catch (_) {
       _mediaJobs = const [];
@@ -145,8 +162,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   Future<void> _saveMediaJobs() async {
-    final encoded = jsonEncode(_mediaJobs.map((e) => e.toJson()).toList());
-    await _preferences.setString(_prefMediaJobs, encoded);
+    await _mediaJobStore.upsertAll(_mediaJobs);
   }
 
   void _startShareListener() {
@@ -266,9 +282,18 @@ class DownloadManager extends ChangeNotifier {
     try {
       final request = http.Request('HEAD', uri)
         ..headers['User-Agent'] = 'DownloadVideoApp/1.2';
-      final response = await client
+      var response = await client
           .send(request)
           .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 405 || response.statusCode == 403) {
+        final fallback = http.Request('GET', uri)
+          ..headers['User-Agent'] = 'DownloadVideoApp/1.2'
+          ..headers['Range'] = 'bytes=0-0';
+        response = await client
+            .send(fallback)
+            .timeout(const Duration(seconds: 15));
+      }
 
       if (response.statusCode < 200 || response.statusCode >= 400) {
         throw StateError(
@@ -295,13 +320,20 @@ class DownloadManager extends ChangeNotifier {
                   : 'download_${DateTime.now().millisecondsSinceEpoch}.bin'),
       );
 
+      final contentRangeSize = _sizeFromContentRange(
+        response.headers['content-range'],
+      );
       return RemoteFileInfo(
         url: uri.toString(),
         fileName: fileName,
         host: uri.host,
-        sizeBytes: response.contentLength != null && response.contentLength! > 0
-            ? response.contentLength
-            : null,
+        supportsResume:
+            response.headers['accept-ranges']?.toLowerCase().contains('bytes') ??
+            response.statusCode == 206,
+        sizeBytes: contentRangeSize ??
+            (response.contentLength != null && response.contentLength! > 0
+                ? response.contentLength
+                : null),
         mimeType: mimeType,
       );
     } on TimeoutException {
@@ -374,7 +406,7 @@ class DownloadManager extends ChangeNotifier {
       useAria2: _useAria2,
     );
     _mediaJobs = [job, ..._mediaJobs];
-    await _saveMediaJobs();
+    await _mediaJobStore.upsert(job);
     _ensureMediaPolling();
     notifyListeners();
     return job;
@@ -457,7 +489,7 @@ class DownloadManager extends ChangeNotifier {
       sizeBytes: 0,
     );
     _mediaJobs = [retried, ..._mediaJobs];
-    await _saveMediaJobs();
+    await _mediaJobStore.upsert(retried);
     _ensureMediaPolling();
     notifyListeners();
     return retried;
@@ -482,7 +514,7 @@ class DownloadManager extends ChangeNotifier {
   Future<void> deleteMediaHistory(MediaJob job) async {
     if (job.isActive) await _mediaBridge.cancel(job.id);
     _mediaJobs = _mediaJobs.where((e) => e.id != job.id).toList();
-    await _saveMediaJobs();
+    await _mediaJobStore.delete(job.id);
     _ensureMediaPolling();
     notifyListeners();
   }
@@ -606,33 +638,64 @@ class DownloadManager extends ChangeNotifier {
   Future<String> updateMediaEngine() => _mediaBridge.updateEngine();
 
   static bool isActiveStatus(TaskStatus status) =>
-      status == TaskStatus.enqueued ||
-      status == TaskStatus.running ||
-      status == TaskStatus.waitingToRetry;
+      directState(status).active;
 
   static bool isFailureStatus(TaskStatus status) =>
-      status == TaskStatus.failed ||
-      status == TaskStatus.notFound ||
-      status == TaskStatus.canceled;
+      directState(status).failure;
 
-  static String statusLabel(TaskStatus status) => switch (status) {
-    TaskStatus.enqueued => 'Queued',
-    TaskStatus.running => 'Downloading',
-    TaskStatus.complete => 'Completed',
-    TaskStatus.notFound => 'Not found',
-    TaskStatus.failed => 'Failed',
-    TaskStatus.canceled => 'Canceled',
-    TaskStatus.waitingToRetry => 'Waiting to retry',
-    TaskStatus.paused => 'Paused',
-  };
+  static String statusLabel(TaskStatus status) => directState(status).label;
 
-  static String mediaStatusLabel(MediaJobState state) => switch (state) {
-    MediaJobState.queued => 'Queued',
-    MediaJobState.running => 'Processing',
-    MediaJobState.succeeded => 'Completed',
-    MediaJobState.failed => 'Failed',
-    MediaJobState.canceled => 'Canceled',
-  };
+  static String mediaStatusLabel(MediaJobState state) => mediaState(state).label;
+
+  static TransferStateView directState(TaskStatus status) {
+    final transferState = switch (status) {
+      TaskStatus.enqueued || TaskStatus.waitingToRetry => TransferState.queued,
+      TaskStatus.running => TransferState.running,
+      TaskStatus.paused => TransferState.paused,
+      TaskStatus.complete => TransferState.completed,
+      TaskStatus.notFound || TaskStatus.failed => TransferState.failed,
+      TaskStatus.canceled => TransferState.canceled,
+    };
+    return _stateView(transferState, switch (status) {
+      TaskStatus.enqueued => 'Queued',
+      TaskStatus.running => 'Downloading',
+      TaskStatus.complete => 'Completed',
+      TaskStatus.notFound => 'Not found',
+      TaskStatus.failed => 'Failed',
+      TaskStatus.canceled => 'Canceled',
+      TaskStatus.waitingToRetry => 'Waiting to retry',
+      TaskStatus.paused => 'Paused',
+    });
+  }
+
+  static TransferStateView mediaState(MediaJobState state) {
+    final transferState = switch (state) {
+      MediaJobState.queued => TransferState.queued,
+      MediaJobState.running => TransferState.running,
+      MediaJobState.succeeded => TransferState.completed,
+      MediaJobState.failed => TransferState.failed,
+      MediaJobState.canceled => TransferState.canceled,
+    };
+    return _stateView(transferState, switch (state) {
+      MediaJobState.queued => 'Queued',
+      MediaJobState.running => 'Processing',
+      MediaJobState.succeeded => 'Completed',
+      MediaJobState.failed => 'Failed',
+      MediaJobState.canceled => 'Canceled',
+    });
+  }
+
+  static TransferStateView _stateView(TransferState state, String label) {
+    return TransferStateView(
+      state: state,
+      label: label,
+      active: state == TransferState.queued || state == TransferState.running,
+      finalState: state == TransferState.completed ||
+          state == TransferState.failed ||
+          state == TransferState.canceled,
+      failure: state == TransferState.failed || state == TransferState.canceled,
+    );
+  }
 
   static String formatBytes(int? bytes) {
     if (bytes == null || bytes < 0) return 'Unknown size';
@@ -732,12 +795,19 @@ class DownloadManager extends ChangeNotifier {
     return match?.group(1)?.trim();
   }
 
+  static int? _sizeFromContentRange(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final match = RegExp(r'/(\d+)$').firstMatch(value.trim());
+    return int.tryParse(match?.group(1) ?? '');
+  }
+
   @override
   void dispose() {
     _updatesSubscription?.cancel();
     _databaseSubscription?.cancel();
     _shareSubscription?.cancel();
     _mediaPollTimer?.cancel();
+    unawaited(_mediaJobStore.close());
     super.dispose();
   }
 }
