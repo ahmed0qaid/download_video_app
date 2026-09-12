@@ -4,12 +4,12 @@ publish_to: 'none'
 version: 1.2.0+3
 
 environment:
-  sdk: '>=3.13.0 <4.0.0'
+  sdk: '>=3.9.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  background_downloader: ^9.6.1
+  background_downloader: ^9.5.9
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   shared_preferences: ^2.5.5

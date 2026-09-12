@@ -32,8 +32,12 @@ class _LibraryPageState extends State<LibraryPage> {
         final query = _search.text.trim().toLowerCase();
         final direct = widget.manager.records
             .where((record) => record.status == TaskStatus.complete)
-            .where((record) => record.task.filename.toLowerCase().contains(query))
-            .where((record) => _matchesCategory(record.task.filename, _category))
+            .where(
+              (record) => record.task.filename.toLowerCase().contains(query),
+            )
+            .where(
+              (record) => _matchesCategory(record.task.filename, _category),
+            )
             .toList();
         final media = widget.manager.mediaJobs
             .where((job) => job.state == MediaJobState.succeeded)
@@ -53,7 +57,10 @@ class _LibraryPageState extends State<LibraryPage> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                     children: [
-                      Text('Library', style: Theme.of(context).textTheme.headlineMedium),
+                      Text(
+                        'Library',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                       const SizedBox(height: 3),
                       Text(
                         '$completedCount matching completed downloads',
@@ -92,7 +99,8 @@ class _LibraryPageState extends State<LibraryPage> {
                               Pill(
                                 label: entry.$2,
                                 selected: _category == entry.$1,
-                                onTap: () => setState(() => _category = entry.$1),
+                                onTap: () =>
+                                    setState(() => _category = entry.$1),
                               ),
                               const SizedBox(width: 8),
                             ],
@@ -148,12 +156,42 @@ class _LibraryPageState extends State<LibraryPage> {
         ? filename.split('.').last.toLowerCase()
         : '';
     return switch (category) {
-      1 => {'pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'}
-          .contains(extension),
-      2 => {'mp4', 'mkv', 'webm', 'mov', 'avi', 'mp3', 'wav', 'flac', 'm4a', 'jpg', 'jpeg', 'png', 'webp'}
-          .contains(extension),
+      1 => {
+        'pdf',
+        'doc',
+        'docx',
+        'txt',
+        'csv',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+      }.contains(extension),
+      2 => {
+        'mp4',
+        'mkv',
+        'webm',
+        'mov',
+        'avi',
+        'mp3',
+        'wav',
+        'flac',
+        'm4a',
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+      }.contains(extension),
       3 => {'zip', 'rar', '7z', 'tar', 'gz', 'xz', 'bz2'}.contains(extension),
-      4 => {'apk', 'aab', 'exe', 'msi', 'dmg', 'deb', 'rpm'}.contains(extension),
+      4 => {
+        'apk',
+        'aab',
+        'exe',
+        'msi',
+        'dmg',
+        'deb',
+        'rpm',
+      }.contains(extension),
       _ => true,
     };
   }
@@ -168,7 +206,11 @@ class _MediaLibraryRow extends StatelessWidget {
   Future<void> _open(BuildContext context) async {
     if (job.playlist) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playlist items are saved in the public Downloads folder.')),
+        const SnackBar(
+          content: Text(
+            'Playlist items are saved in the app external downloads folder.',
+          ),
+        ),
       );
       return;
     }
@@ -196,8 +238,8 @@ class _MediaLibraryRow extends StatelessWidget {
             job.playlist
                 ? Icons.video_library_outlined
                 : job.isAudioOnly
-                    ? Icons.audio_file_outlined
-                    : Icons.movie_outlined,
+                ? Icons.audio_file_outlined
+                : Icons.movie_outlined,
             color: accent,
             size: 21,
           ),
@@ -219,7 +261,9 @@ class _MediaLibraryRow extends StatelessWidget {
                     final shared = await manager.shareMediaJob(job);
                     if (!context.mounted || shared) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('The media file could not be shared.')),
+                      const SnackBar(
+                        content: Text('The media file could not be shared.'),
+                      ),
                     );
                   }
                 },
@@ -251,7 +295,9 @@ class _DirectLibraryRow extends StatelessWidget {
       final opened = await manager.open(record);
       if (!context.mounted || opened) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No compatible app could open this file.')),
+        const SnackBar(
+          content: Text('No compatible app could open this file.'),
+        ),
       );
     }
 
@@ -282,11 +328,21 @@ class _DirectLibraryRow extends StatelessWidget {
   }
 
   static IconData _iconFor(String filename) {
-    final ext = filename.contains('.') ? filename.split('.').last.toLowerCase() : '';
-    if ({'mp4', 'mkv', 'webm', 'mov', 'avi'}.contains(ext)) return Icons.movie_outlined;
-    if ({'mp3', 'wav', 'flac', 'm4a'}.contains(ext)) return Icons.audio_file_outlined;
-    if ({'jpg', 'jpeg', 'png', 'webp'}.contains(ext)) return Icons.image_outlined;
-    if ({'zip', 'rar', '7z', 'tar', 'gz', 'xz'}.contains(ext)) return Icons.folder_zip_outlined;
+    final ext = filename.contains('.')
+        ? filename.split('.').last.toLowerCase()
+        : '';
+    if ({'mp4', 'mkv', 'webm', 'mov', 'avi'}.contains(ext)) {
+      return Icons.movie_outlined;
+    }
+    if ({'mp3', 'wav', 'flac', 'm4a'}.contains(ext)) {
+      return Icons.audio_file_outlined;
+    }
+    if ({'jpg', 'jpeg', 'png', 'webp'}.contains(ext)) {
+      return Icons.image_outlined;
+    }
+    if ({'zip', 'rar', '7z', 'tar', 'gz', 'xz'}.contains(ext)) {
+      return Icons.folder_zip_outlined;
+    }
     if (ext == 'pdf') return Icons.picture_as_pdf_outlined;
     if ({'apk', 'aab'}.contains(ext)) return Icons.android_rounded;
     return Icons.insert_drive_file_outlined;

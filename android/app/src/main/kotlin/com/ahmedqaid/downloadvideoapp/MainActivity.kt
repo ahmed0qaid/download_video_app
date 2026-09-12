@@ -1,8 +1,13 @@
 package com.ahmedqaid.downloadvideoapp
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.webkit.MimeTypeMap
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.work.Constraints
 import androidx.work.NetworkType
@@ -31,6 +36,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        requestNotificationsIfNeeded()
         pendingSharedText = sharedTextFromIntent(intent) ?: pendingSharedText
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
@@ -343,6 +349,23 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun requestNotificationsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST,
+        )
+    }
+
     private fun mimeTypeFor(file: File): String {
         val extension = file.extension.lowercase(Locale.ROOT)
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
@@ -396,5 +419,6 @@ class MainActivity : FlutterActivity() {
         private const val MEDIA_CHANNEL = "download_video_app/media"
         private const val SHARE_CHANNEL = "download_video_app/share"
         private const val MEDIA_WORK_TAG = "media-download"
+        private const val NOTIFICATION_PERMISSION_REQUEST = 4021
     }
 }

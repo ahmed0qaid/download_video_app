@@ -68,7 +68,10 @@ class SettingsPage extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                   children: [
-                    Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
+                    Text(
+                      'Settings',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
                     const SizedBox(height: 3),
                     Text(
                       'Direct transfers and public media extraction use separate engines so one cannot break the other.',
@@ -91,22 +94,35 @@ class SettingsPage extends StatelessWidget {
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Preferred video quality'),
-                          subtitle: const Text('Used as the recommended format during inspection'),
+                          subtitle: const Text(
+                            'Used as the recommended format during inspection',
+                          ),
                           trailing: DropdownButton<int>(
                             value: manager.preferredQuality,
                             underline: const SizedBox.shrink(),
                             items: const [
                               DropdownMenuItem(value: 0, child: Text('Best')),
-                              DropdownMenuItem(value: 2160, child: Text('2160p')),
-                              DropdownMenuItem(value: 1440, child: Text('1440p')),
-                              DropdownMenuItem(value: 1080, child: Text('1080p')),
+                              DropdownMenuItem(
+                                value: 2160,
+                                child: Text('2160p'),
+                              ),
+                              DropdownMenuItem(
+                                value: 1440,
+                                child: Text('1440p'),
+                              ),
+                              DropdownMenuItem(
+                                value: 1080,
+                                child: Text('1080p'),
+                              ),
                               DropdownMenuItem(value: 720, child: Text('720p')),
                               DropdownMenuItem(value: 480, child: Text('480p')),
                               DropdownMenuItem(value: 360, child: Text('360p')),
                             ],
                             onChanged: manager.mediaExtractionEnabled
                                 ? (value) {
-                                    if (value != null) manager.setPreferredQuality(value);
+                                    if (value != null) {
+                                      manager.setPreferredQuality(value);
+                                    }
                                   }
                                 : null,
                           ),
@@ -145,7 +161,9 @@ class SettingsPage extends StatelessWidget {
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Simultaneous downloads'),
-                          subtitle: const Text('Native holding queue concurrency limit'),
+                          subtitle: const Text(
+                            'Native holding queue concurrency limit',
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -154,8 +172,8 @@ class SettingsPage extends StatelessWidget {
                                 onPressed: manager.simultaneousDownloads <= 1
                                     ? null
                                     : () => manager.setSimultaneousDownloads(
-                                          manager.simultaneousDownloads - 1,
-                                        ),
+                                        manager.simultaneousDownloads - 1,
+                                      ),
                                 icon: const Icon(Icons.remove_rounded),
                               ),
                               Text(
@@ -167,8 +185,8 @@ class SettingsPage extends StatelessWidget {
                                 onPressed: manager.simultaneousDownloads >= 9
                                     ? null
                                     : () => manager.setSimultaneousDownloads(
-                                          manager.simultaneousDownloads + 1,
-                                        ),
+                                        manager.simultaneousDownloads + 1,
+                                      ),
                                 icon: const Icon(Icons.add_rounded),
                               ),
                             ],
@@ -177,7 +195,9 @@ class SettingsPage extends StatelessWidget {
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Auto-retry failed transfers'),
-                          subtitle: const Text('New direct downloads retry up to 5 times'),
+                          subtitle: const Text(
+                            'New direct downloads retry up to 5 times',
+                          ),
                           value: manager.autoRetry,
                           onChanged: manager.setAutoRetry,
                         ),
@@ -207,14 +227,18 @@ class SettingsPage extends StatelessWidget {
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Direct-download directory'),
-                          subtitle: Text('App support / ${manager.downloadDirectory}'),
+                          subtitle: Text(
+                            'App support / ${manager.downloadDirectory}',
+                          ),
                           trailing: const Icon(Icons.edit_outlined),
                           onTap: () => _editDirectory(context),
                         ),
                         const ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text('Video/audio directory'),
-                          subtitle: Text('Public Downloads / Download Video App'),
+                          subtitle: Text(
+                            'Android app external downloads / Download Video App',
+                          ),
                           leading: Icon(Icons.video_file_outlined),
                         ),
                       ],
@@ -304,10 +328,17 @@ class _SettingsSection extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 19, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  icon,
+                  size: 19,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
               ],
             ),

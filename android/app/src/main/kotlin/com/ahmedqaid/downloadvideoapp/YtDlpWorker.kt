@@ -46,7 +46,8 @@ class YtDlpWorker(
             if (useAria2) Aria2c.init(applicationContext)
 
             val outputDirectory = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                    ?: applicationContext.filesDir,
                 APP_FOLDER,
             )
             if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {

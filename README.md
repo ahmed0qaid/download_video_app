@@ -22,7 +22,7 @@ The two engines are intentionally separate. A site extractor failure does not br
 - Retry, cancel, open, share, and persistent Flutter-side history.
 - Receive links from Android's Share sheet.
 - Update yt-dlp extractors from Settings.
-- Media outputs are stored under `Downloads/Download Video App`.
+- Media outputs are stored under the app external downloads folder in `Download Video App`.
 
 ### Direct files
 - Real HTTP `HEAD` metadata inspection.
