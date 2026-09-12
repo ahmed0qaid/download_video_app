@@ -1,17 +1,43 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter / Dart / Pub
 .dart_tool/
-.packages
-.pub/
-build/
-coverage/
 .flutter-plugins
 .flutter-plugins-dependencies
-.metadata
-.idea/
-.vscode/
-*.iml
-android/local.properties
-ios/Flutter/Generated.xcconfig
-ios/Flutter/ephemeral/
-macos/Flutter/ephemeral/
-windows/flutter/ephemeral/
-linux/flutter/ephemeral/
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Android local/generated state
+/android/.gradle/
+/android/local.properties
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Keep this repository Android-focused.
+/ios/
+/linux/
+/macos/
+/web/
+/windows/

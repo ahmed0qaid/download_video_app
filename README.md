@@ -1,34 +1,47 @@
 # Download Video App
 
-Flutter conversion of the supplied Stitch download-manager design.
+A Flutter download manager for direct **HTTP/HTTPS file URLs**. The app keeps the original Stitch-inspired visual design while replacing demo data with a real persistent background download engine.
 
-## Included screens
+## Implemented
 
-- Transfers / downloads dashboard
-- Inspect & add download flow
-- Local file library
-- Settings
-- Light and dark themes
-- Responsive Material 3 layout
-- Clipboard paste interaction, filters, toggles, selection states, and navigation
+- Direct link inspection using a real HTTP `HEAD` request
+- Background downloads with persistent task history
+- Live progress, expected file size, transfer speed, and estimated time remaining when the server provides them
+- Pause, resume, cancel, and retry
+- Native Android download notifications
+- Wi-Fi-only enforcement for new tasks
+- Configurable simultaneous download limit
+- Configurable relative download folder
+- Automatic retries for new tasks
+- Real completed-file library with search/category filters
+- Open completed files with an installed compatible app
+- Light, dark, and system themes persisted locally
+- Android project files with package `com.ahmedqaid.downloadvideoapp`
+- GitHub Actions checks: `flutter analyze`, `flutter test`, and Android debug APK build
+
+## Supported links
+
+The app intentionally supports direct HTTP/HTTPS file URLs only. It does not bypass DRM, authentication, paywalls, or website restrictions and it does not include site-specific video extraction.
 
 ## Run
 
 ```bash
+git clone https://github.com/ahmed0qaid/download_video_app.git
+cd download_video_app
 flutter pub get
 flutter run
 ```
 
-If you cloned the repository and platform folders are not present yet, generate them once with:
+For an APK:
 
 ```bash
-flutter create .
-flutter pub get
-flutter run
+flutter build apk --debug
 ```
 
-The Flutter UI source lives in `lib/` and the app icon reference is in `assets/app_icon.png`.
+The generated debug APK is also uploaded as a GitHub Actions artifact after successful CI builds.
 
-## Design source
+## Main packages
 
-The visual language follows the supplied Stitch mockups: off-white / graphite light theme, engineered dark theme, teal transfer accent, compact download telemetry, file library, and settings panels.
+- `background_downloader` for native background transfer execution, persistence, notifications, pause/resume, and queue controls
+- `http` for link metadata inspection
+- `shared_preferences` for app preferences

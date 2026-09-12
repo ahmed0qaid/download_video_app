@@ -18,7 +18,6 @@ class AppColors {
   static const cloud = Color(0xFFF2F4F5);
   static const mist = Color(0xFFAAB1B7);
   static const error = Color(0xFFB54747);
-  static const amber = Color(0xFFE5C07B);
 }
 
 class AppTheme {
@@ -157,19 +156,21 @@ class AppTheme {
   }
 
   static TextTheme _textTheme(Brightness brightness) {
-    final primary = brightness == Brightness.dark ? AppColors.cloud : AppColors.charcoal;
-    final secondary = brightness == Brightness.dark ? AppColors.mist : AppColors.graphite;
+    final primary =
+        brightness == Brightness.dark ? AppColors.cloud : AppColors.charcoal;
+    final secondary =
+        brightness == Brightness.dark ? AppColors.mist : AppColors.graphite;
     return TextTheme(
       headlineMedium: TextStyle(
         fontSize: 28,
         fontWeight: FontWeight.w800,
-        letterSpacing: -0.7,
+        letterSpacing: 0,
         color: primary,
       ),
       titleLarge: TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.3,
+        letterSpacing: 0,
         color: primary,
       ),
       titleMedium: TextStyle(
@@ -179,8 +180,16 @@ class AppTheme {
       ),
       bodyLarge: TextStyle(fontSize: 15, height: 1.45, color: primary),
       bodyMedium: TextStyle(fontSize: 13, height: 1.45, color: secondary),
-      labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary),
-      labelMedium: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: secondary),
+      labelLarge: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: primary,
+      ),
+      labelMedium: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: secondary,
+      ),
     );
   }
 }

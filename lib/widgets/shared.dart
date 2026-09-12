@@ -22,7 +22,11 @@ class TransferHeader extends StatelessWidget {
               color: accent,
               borderRadius: BorderRadius.circular(isDark ? 6 : 9),
             ),
-            child: const Icon(Icons.download_rounded, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.download_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -45,17 +49,11 @@ class TransferHeader extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.storage_rounded, size: 14, color: accent),
+                Icon(Icons.cloud_download_outlined, size: 14, color: accent),
                 const SizedBox(width: 5),
-                Text('42.8 GB', style: Theme.of(context).textTheme.labelMedium),
+                Text('READY', style: Theme.of(context).textTheme.labelMedium),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: accent,
-            child: const Icon(Icons.person_rounded, color: Colors.white, size: 18),
           ),
         ],
       ),
@@ -78,7 +76,7 @@ class SectionLabel extends StatelessWidget {
             text.toUpperCase(),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   fontSize: 10,
-                  letterSpacing: 0.9,
+                  letterSpacing: 0,
                   fontWeight: FontWeight.w700,
                 ),
           ),

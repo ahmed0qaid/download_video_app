@@ -4,46 +4,55 @@ import 'app_theme.dart';
 import 'screens/downloads_page.dart';
 import 'screens/library_page.dart';
 import 'screens/settings_page.dart';
+import 'services/download_manager.dart';
 
-void main() {
-  runApp(const DownloadVideoApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final manager = DownloadManager();
+  await manager.initialize();
+  runApp(DownloadVideoApp(manager: manager));
 }
 
 class DownloadVideoApp extends StatefulWidget {
-  const DownloadVideoApp({super.key});
+  const DownloadVideoApp({super.key, this.manager});
+
+  final DownloadManager? manager;
 
   @override
   State<DownloadVideoApp> createState() => _DownloadVideoAppState();
 }
 
 class _DownloadVideoAppState extends State<DownloadVideoApp> {
-  ThemeMode _themeMode = ThemeMode.system;
+  late final DownloadManager _manager;
+
+  @override
+  void initState() {
+    super.initState();
+    _manager = widget.manager ?? DownloadManager();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Transfers',
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: _themeMode,
-      home: AppShell(
-        themeMode: _themeMode,
-        onThemeChanged: (mode) => setState(() => _themeMode = mode),
-      ),
+    return ListenableBuilder(
+      listenable: _manager,
+      builder: (context, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Download Video App',
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: _manager.themeMode,
+          home: AppShell(manager: _manager),
+        );
+      },
     );
   }
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({
-    super.key,
-    required this.themeMode,
-    required this.onThemeChanged,
-  });
+  const AppShell({super.key, required this.manager});
 
-  final ThemeMode themeMode;
-  final ValueChanged<ThemeMode> onThemeChanged;
+  final DownloadManager manager;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -55,9 +64,9 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const DownloadsPage(),
-      const LibraryPage(),
-      SettingsPage(themeMode: widget.themeMode, onThemeChanged: widget.onThemeChanged),
+      DownloadsPage(manager: widget.manager),
+      LibraryPage(manager: widget.manager),
+      SettingsPage(manager: widget.manager),
     ];
 
     return Scaffold(

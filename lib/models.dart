@@ -1,31 +1,29 @@
-enum DownloadStatus { active, paused, completed, failed }
-
-class DownloadItem {
-  const DownloadItem({
-    required this.name,
-    required this.detail,
-    required this.size,
-    required this.status,
-    this.progress = 0,
+class RemoteFileInfo {
+  const RemoteFileInfo({
+    required this.url,
+    required this.fileName,
+    required this.host,
+    this.sizeBytes,
+    this.mimeType,
   });
 
-  final String name;
-  final String detail;
-  final String size;
-  final DownloadStatus status;
-  final double progress;
+  final String url;
+  final String fileName;
+  final String host;
+  final int? sizeBytes;
+  final String? mimeType;
 }
 
-class LibraryItem {
-  const LibraryItem({
-    required this.name,
-    required this.size,
-    required this.meta,
-    required this.type,
+class TransferTelemetry {
+  const TransferTelemetry({
+    required this.progress,
+    this.expectedFileSize,
+    this.networkSpeed,
+    this.timeRemaining,
   });
 
-  final String name;
-  final String size;
-  final String meta;
-  final String type;
+  final double progress;
+  final int? expectedFileSize;
+  final double? networkSpeed;
+  final Duration? timeRemaining;
 }

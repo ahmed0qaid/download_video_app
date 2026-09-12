@@ -1,15 +1,18 @@
 name: download_video_app
-description: A polished Flutter download manager UI converted from the provided Stitch design.
+description: A real Flutter background download manager for direct HTTP/HTTPS files.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.13.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  background_downloader: ^9.6.1
   cupertino_icons: ^1.0.8
+  http: ^1.6.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
