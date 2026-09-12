@@ -253,10 +253,10 @@ class SettingsPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _SettingsSection(
+                    const _SettingsSection(
                       icon: Icons.shield_outlined,
                       title: 'Responsible use',
-                      children: const [
+                      children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text('Public and permitted media only'),
