@@ -236,7 +236,7 @@ class _ActiveCard extends StatelessWidget {
               children: [
                 Text('64%', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: accent)),
                 const Spacer(),
-                _Metric(icon: Icons.speed_rounded, value: '4.8 MB/s'),
+                const _Metric(icon: Icons.speed_rounded, value: '4.8 MB/s'),
                 const SizedBox(width: 16),
                 const _Metric(icon: Icons.timer_outlined, value: '2m 14s left'),
                 const SizedBox(width: 16),
